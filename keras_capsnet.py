@@ -30,6 +30,40 @@ def conv2d_caps(input_layer, nb_filters, kernel_size, capsule_size, strides=2):
     return squash(capsules)
 
 
+class Mask(Layer):
+    """
+        A mask layer for decoder to minimize the marginal loss.
+    """
+    def call(self, inputs):
+        
+        if type(inputs) is list:
+
+            assert len(inputs) == 2
+            inputs, mask = inputs[0], inputs[1]
+
+            assert mask.get_shape().as_list()[1] == inputs.get_shape().as_list()[1]
+        
+        else:
+            length = K.sum(K.square(inputs), axis=-1)
+            mask = K.one_hot(
+                indice=K.argmax(x, 1),
+                num_classes=inputs.get_shape().as_list()[1]
+            )
+
+
+        mask = K.expand_dims(mask, -1)
+        # [None, nb_classes, 1]
+        masked = K.batch_flatten(inputs*mask)
+        return masked
+
+    def compute_output_shape(self, input_shape):
+
+        if type(input_shape[0]) is tuple:
+            return tuple([None, input_shape[0][1]*input_shape[0][2]])
+        else:
+            return tuple([None, input_shape[1]*input_shape[2]])
+
+
 class DenseCapsule(Layer):
 
     """

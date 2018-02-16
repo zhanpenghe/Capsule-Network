@@ -4,6 +4,17 @@ from keras.engine.topology import Layer
 from keras.layers import Conv2D, Reshape
 from keras.activations import softmax
 
+
+def margin_loss(y_true, y_pred, 
+    m_plus=0.9, m_minus=0.1, down_weighting=0.5):
+    """
+        The margin loss defined in the paper.
+        The default parameters are those used in the paper.
+    """
+    L = y_true*K.square(K.maximum(0.0, m_plus-y_pred)) + down_weighting*(1-y_true)*K.square(K.maximum(0.0, y_pred-m_minus))
+
+    return K.mean(K.sum(L, 1))
+
 def squash(vector, epsilon=K.epsilon()):
 
     vector += epsilon
@@ -24,7 +35,7 @@ def conv2d_caps(input_layer, nb_filters, kernel_size, capsule_size, strides=2):
 
     conv_shape = conv.shape
     nb_capsules= int(conv_shape[1]*conv_shape[2]*nb_filters)
-
+    
     capsules = Reshape(target_shape=(nb_capsules, capsule_size, 1))(conv)
 
     return squash(capsules)

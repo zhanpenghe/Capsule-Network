@@ -1,7 +1,7 @@
 import numpy as np
 import keras.backend as K
 from keras.engine.topology import Layer
-from keras.layers import Conv2D, Reshape
+from keras.layers import Conv2D, Reshape, Lambda
 from keras.activations import softmax
 
 
@@ -15,13 +15,14 @@ def margin_loss(y_true, y_pred,
 
     return K.mean(K.sum(L, 1))
 
+
 def squash(vector, epsilon=K.epsilon()):
 
     vector += epsilon
     norm = K.sum(K.square(vector), -1, keepdims=True)
     scalar_factor = norm / (1 + norm) / K.sqrt(norm)
     squashed = scalar_factor * vector
-    return (squashed)
+    return squashed
 
 
 def conv2d_caps(input_layer, nb_filters, kernel_size, capsule_size, strides=2):
@@ -38,7 +39,16 @@ def conv2d_caps(input_layer, nb_filters, kernel_size, capsule_size, strides=2):
     
     capsules = Reshape(target_shape=(nb_capsules, capsule_size, 1))(conv)
 
-    return squash(capsules)
+    return Lambda(squash, name='primarycap_squash')(capsules)
+
+
+class CapsuleLength(Layer):
+
+    def call(self, inputs, **kwargs):
+        return K.sqrt(K.sum(K.square(inputs), -2))
+
+    def compute_output_shape(self, input_shape):
+        return input_shape[:-2]
 
 
 class Mask(Layer):
@@ -57,12 +67,11 @@ class Mask(Layer):
         else:
             length = K.sum(K.square(inputs), axis=-1)
             mask = K.one_hot(
-                indice=K.argmax(x, 1),
+                indices=K.argmax(length, 1),
                 num_classes=inputs.get_shape().as_list()[1]
             )
 
-
-        mask = K.expand_dims(mask, -1)
+        # mask = K.expand_dims(mask, -1)
         # [None, nb_classes, 1]
         masked = K.batch_flatten(inputs*mask)
         return masked
@@ -70,9 +79,9 @@ class Mask(Layer):
     def compute_output_shape(self, input_shape):
 
         if type(input_shape[0]) is tuple:
-            return tuple([None, input_shape[0][1]*input_shape[0][2]])
+            return tuple([None, input_shape[0][1]])
         else:
-            return tuple([None, input_shape[1]*input_shape[2]])
+            return tuple([None, input_shape[1]])
 
 
 class DenseCapsule(Layer):
@@ -127,6 +136,7 @@ class DenseCapsule(Layer):
 
     def compute_output_shape(self, input_shape):
         return tuple([None, self.nb_capsules, self.capsule_size, 1])
+
 
 def test():
     from keras.layers import Input

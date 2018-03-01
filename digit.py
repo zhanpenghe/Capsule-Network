@@ -10,8 +10,6 @@ from keras.utils import to_categorical
 from keras.layers import Input, Conv2D, Dense, Reshape
 from keras_capsnet import margin_loss, conv2d_caps, DenseCapsule, Mask, CapsuleLength
 
-import keras.backend as K
-
 img_dim = (28, 28, 1)
 output_shape = 10
 
@@ -39,15 +37,15 @@ def build_models():
         kernel_size=9,
         strides=2
     )
-    digit_caps = DenseCapsule(capsule_size=16, nb_capsules=output_shape)(primary_caps)
-    output_layer = CapsuleLength()(digit_caps)
+    digit_caps = DenseCapsule(capsule_size=16, nb_capsules=output_shape, name='densecaps')(primary_caps)
+    output_layer = CapsuleLength(name='length')(digit_caps)
 
     # Decoder part..
     true_labels_input = Input(shape=(output_shape,))  # use the true label to mask the capsule
-    masked_by_true_label = Mask()([output_layer, true_labels_input])  # for training process
-    masked_by_max = Mask()(output_layer)  # for prediction process
+    masked_by_true_label = Mask()([digit_caps, true_labels_input])  # for training process
+    masked_by_max = Mask()(digit_caps)  # for prediction process
 
-    decoder = Sequential()
+    decoder = Sequential(name='decoder_out')
     decoder.add(Dense(512, activation='relu', input_dim=16*output_shape))
     decoder.add(Dense(1024, activation='relu'))
     decoder.add(Dense(np.prod(img_dim), activation='sigmoid'))

@@ -45,7 +45,9 @@ def conv2d_caps(input_layer, nb_filters, kernel_size, capsule_size, strides=2):
 class CapsuleLength(Layer):
 
     def call(self, inputs, **kwargs):
-        return K.sqrt(K.sum(K.square(inputs), -2))
+        input_shape = inputs.get_shape().as_list()
+        x = K.reshape(inputs, shape=[-1, input_shape[1], input_shape[2]])
+        return K.sqrt(K.sum(K.square(x), -1))
 
     def compute_output_shape(self, input_shape):
         return input_shape[:-2]
@@ -71,7 +73,8 @@ class Mask(Layer):
                 num_classes=inputs.get_shape().as_list()[1]
             )
 
-        # mask = K.expand_dims(mask, -1)
+        mask = K.expand_dims(K.expand_dims(mask, -1), -1)
+
         # [None, nb_classes, 1]
         masked = K.batch_flatten(inputs*mask)
         return masked

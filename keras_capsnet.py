@@ -37,7 +37,7 @@ def conv2d_caps(input_layer, nb_filters, kernel_size, capsule_size, strides=2):
     conv_shape = conv.shape
     nb_capsules= int(conv_shape[1]*conv_shape[2]*nb_filters)
     
-    capsules = Reshape(target_shape=(nb_capsules, capsule_size, 1))(conv)
+    capsules = Reshape(target_shape=(nb_capsules, capsule_size))(conv)
 
     return Lambda(squash, name='primarycap_squash')(capsules)
 
@@ -67,13 +67,13 @@ class Mask(Layer):
             assert mask.get_shape().as_list()[1] == inputs.get_shape().as_list()[1]
         
         else:
-            length = K.sum(K.square(inputs), axis=-1)
+            length = K.sqrt(K.sum(K.square(inputs), axis=-1))
             mask = K.one_hot(
                 indices=K.argmax(length, 1),
                 num_classes=inputs.get_shape().as_list()[1]
             )
 
-        mask = K.expand_dims(K.expand_dims(mask, -1), -1)
+        mask = K.expand_dims(mask, -1)
 
         # [None, nb_classes, 1]
         masked = K.batch_flatten(inputs*mask)
@@ -105,7 +105,7 @@ class DenseCapsule(Layer):
         self.prev_shape = input_shape
         self.w_ij = self.add_weight(
             name='w_ij',
-            shape=(input_shape[1], self.nb_capsules, self.capsule_size, input_shape[2]),
+            shape=( self.nb_capsules, input_shape[1], self.capsule_size, input_shape[2]),
             initializer=self.initializer
         )
         self.built = True
@@ -118,22 +118,25 @@ class DenseCapsule(Layer):
         for i in range(self.iterations):
 
             c_ij = softmax(b_ij, axis=1)
-            s_j = K.sum(K.batch_dot(u_hat, c_ij, [3, 4]), axis=1, keepdims=True)
+            s_j = K.batch_dot(c_ij, u_hat, [2, 2])
             v_j = squash(s_j)
 
             if i < self.iterations-1:
-                b_ij = b_ij + K.batch_dot(K.tile(v_j,  [1, self.prev_shape[1], 1, 1, 1]), u_hat, [3, 4])
+                b_ij +=  K.batch_dot(v_j, u_hat, [2, 3])
+                # b_ij = b_ij + K.batch_dot(K.tile(v_j,  [1, self.prev_shape[1], 1, 1, 1]), u_hat, [3, 4])
 
-        return K.squeeze(v_j, axis=1)
+        # return K.squeeze(v_j, axis=1)
+        return v_j
 
     def call(self, inputs):
         
-        expanded_input = K.expand_dims(inputs, 2)
-        expanded_input = K.tile(expanded_input, [1, 1, self.nb_capsules, 1, 1])
-
-        u_hat = self.batch_dot(expanded_input, self.w_ij, [2, 3])
+        expanded_input = K.expand_dims(inputs, 1)
+        print(expanded_input.shape)
+        expanded_input = K.tile(expanded_input, [1, self.nb_capsules, 1, 1])
+        print(expanded_input.shape)
+        u_hat = K.map_fn(lambda x: K.batch_dot(x, self.w_ij, [2, 3]), elems=expanded_input)
         
-        b_ij = K.zeros(shape=[K.shape(u_hat)[0], self.prev_shape[1], self.nb_capsules, 1, 1], dtype=np.float32) 
+        b_ij = K.zeros(shape=[K.shape(u_hat)[0], self.nb_capsules, self.prev_shape[1]], dtype=np.float32)
         
         return self._dynamic_routing(u_hat, b_ij)
 

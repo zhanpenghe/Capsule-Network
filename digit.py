@@ -38,7 +38,7 @@ def build_models():
         strides=2
     )
     digit_caps = DenseCapsule(capsule_size=16, nb_capsules=output_shape, name='densecaps')(primary_caps)
-    output_layer = CapsuleLength(name='length')(digit_caps)
+    output_layer = CapsuleLength(name='capsnet')(digit_caps)
 
     # Decoder part..
     true_labels_input = Input(shape=(output_shape,))  # use the true label to mask the capsule
@@ -56,7 +56,7 @@ def build_models():
 
     train_model = Model(
         inputs=[input_layer, true_labels_input],
-        outputs=[train_decoder, output_layer]
+        outputs=[output_layer, train_decoder]
     )
 
     eval_model = Model(
@@ -73,7 +73,8 @@ def main():
     train_model, eval_model = build_models()
     print(train_model.summary())
     train_model.compile(loss=[margin_loss, 'mse'], optimizer='adam')
-    train_model.fit([x_train, y_train], [x_train, y_train], batch_size=128, epochs=5, validation_data=[[x_test, y_test], [x_test, y_test]])
+
+    train_model.fit([x_train, y_train], [y_train, x_train], batch_size=128, epochs=5, validation_data=[[x_test, y_test], [y_test, x_test]])
 
 
 if __name__ == '__main__':
